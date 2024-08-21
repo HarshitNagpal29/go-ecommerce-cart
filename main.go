@@ -23,8 +23,29 @@ var (
 	)
 )
 
+var (
+	httpRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Help:    "Duration of HTTP requests.",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"method"},
+	)
+)
+
+func promMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		timer := prometheus.NewTimer(httpRequestDuration.WithLabelValues(c.Request.Method))
+		httpRequestsTotal.WithLabelValues(c.Request.Method).Inc()
+		c.Next()
+		timer.ObserveDuration()
+	}
+}
+
 func init() {
 	prometheus.MustRegister(httpRequestsTotal)
+	prometheus.MustRegister(httpRequestDuration)
 }
 
 func main() {
@@ -40,6 +61,7 @@ func main() {
 
 	routes.UserRoutes(router)
 	router.Use(middleware.Authentication())
+	router.Use(promMiddleware())
 
 	router.GET("/addtocart", app.AddToCart())
 	router.GET("/removeitem", app.RemoveItem())
